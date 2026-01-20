@@ -20,5 +20,23 @@ async fn leave() -> CommandResult {
     Ok(())
 }
 
+#[command]
+#[owners_only]
+async fn mute() -> CommandResult {
+
+    Ok(())
+}
+
+#[command]
+#[owners_only]
+async fn unmute() -> CommandResult {
+
+    Ok(())
+}
+
+
+
+
+
 
 
