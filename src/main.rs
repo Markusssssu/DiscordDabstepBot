@@ -1,71 +1,99 @@
-use std::{env, sync::{Arc, Mutex}, time::Duration};
+#![allow(deprecated)]
+mod commands;
+
+use std::env;
+use std::sync::Arc;
+use std::collections::HashSet;
 use dotenv::dotenv;
 
+use tracing::{error, info};
+
 use serenity::async_trait;
+use serenity::framework::standard::macros::group;
 use serenity::model::channel::Message;
+use serenity::model::gateway::Ready;
+use serenity::utils::MessageBuilder;
+use serenity::framework::standard::Configuration;
+use serenity::framework::standard::StandardFramework;
+use serenity::gateway::ShardManager;
+use serenity::model::event::ResumedEvent;
+use serenity::http::Http;
 use serenity::prelude::*;
 
-use vosk::{DecodingState, Model, Recognizer};
+use crate::commands::admin::*;
+use crate::commands::general::*;
+use crate::commands::music::*;
 
-use hound::WavReader;
+pub struct ShardManagerContainer;
+
+impl TypeMapKey for ShardManagerContainer {
+    type Value = Arc<ShardManager>;
+}
 
 struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn message(&self, ctx: Context, msg: Message) {
-        if msg.content == "!ping" {
-            if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
-                println!("Error sending message: {why:?}");
-            }
-        }
+    async fn ready(&self, _: Context, ready: Ready) {
+        info!("Connected as {}", ready.user.name);
+    }
+
+    async fn resume(&self, _: Context, _: ResumedEvent) {
+        info!("Resumed");
     }
 }
 
+#[group]
+#[commands(quit, join, leave, mute, unmute, play, stop, next)]
+struct General;
+
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
+    dotenv::dotenv().expect("Failed to load .env file");
 
-    // let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    // let intents = GatewayIntents::GUILD_MESSAGES
-    //     | GatewayIntents::DIRECT_MESSAGES
-    //     | GatewayIntents::MESSAGE_CONTENT;
-    //
-    // let mut client =
-    //     Client::builder(&token, intents).event_handler(Handler).await.expect("Err creating client");
-    //
-    // println!("API Token {}", token);
-    //
-    // if let Err(why) = client.start().await {
-    //     println!("Client error: {why:?}");
-    // }
+    tracing_subscriber::fmt::init();
 
-    let mut args = env::args();
-    args.next();
+    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
-    let model_path = args.next().expect("A model path was not provided");
-    let wav_path = args
-        .next()
-        .expect("A path for the wav file to be read was not provided");
+    let http = Http::new(&token);
 
-    let mut reader = WavReader::open(wav_path).expect("Could not create the WAV reader");
-    let samples = reader
-        .samples()
-        .collect::<hound::Result<Vec<i16>>>()
-        .expect("Could not read WAV file");
+    let (owners, _bot_id) = match http.get_current_application_info().await {
+        Ok(info) => {
+            let mut owners = HashSet::new();
+            if let Some(owner) = &info.owner {
+                owners.insert(owner.id);
+            }
 
-    let model = Model::new(model_path).expect("Could not create the model");
-    let mut recognizer = Recognizer::new(&model, reader.spec().sample_rate as f32)
-        .expect("Could not create the recognizer");
+            (owners, info.id)
+        },
+        Err(why) => panic!("Could not access application info: {:?}", why),
+    };
 
-    recognizer.set_max_alternatives(10);
-    recognizer.set_words(true);
-    recognizer.set_partial_words(true);
+    let framework = StandardFramework::new().group(&GENERAL_GROUP);
+    framework.configure(Configuration::new().owners(owners).prefix("~"));
 
-    for sample in samples.chunks(100) {
-        recognizer.accept_waveform(sample).unwrap();
-        println!("{:#?}", recognizer.partial_result());
+    let intents = GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT;
+    let mut client = Client::builder(&token, intents)
+        .framework(framework)
+        .event_handler(Handler)
+        .await
+        .expect("Err creating client");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<ShardManagerContainer>(client.shard_manager.clone());
     }
 
-    println!("{:#?}", recognizer.final_result().multiple().unwrap());
+    let shard_manager = client.shard_manager.clone();
+
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Could not register ctrl+c handler");
+        shard_manager.shutdown_all().await;
+    });
+
+    if let Err(why) = client.start().await {
+        error!("Client error: {:?}", why);
+    }
 }
