@@ -9,12 +9,12 @@ use dotenv::dotenv;
 use tracing::{error, info};
 
 use serenity::async_trait;
-use serenity::framework::standard::macros::group;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::utils::MessageBuilder;
 use serenity::framework::standard::Configuration;
 use serenity::framework::standard::StandardFramework;
+use serenity::framework::standard::macros::group;
 use serenity::gateway::ShardManager;
 use serenity::model::event::ResumedEvent;
 use serenity::http::Http;
@@ -43,8 +43,14 @@ impl EventHandler for Handler {
     }
 }
 
+/*=====commands=====*/
+// for admin {join, leave, mute, unmute}
+// for general {quit, ping}
+// for music {play, stop, next}
+/*=================*/
+
 #[group]
-#[commands(quit, join, leave, mute, unmute, play, stop, next)]
+#[commands(join, leave, mute, unmute, quit, ping, play, stop, next)]
 struct General;
 
 #[tokio::main]
