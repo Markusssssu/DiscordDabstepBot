@@ -1,13 +1,20 @@
 #![allow(deprecated)]
 mod commands;
+mod utils;
+mod events;
+
+use crate::utils::*;
 
 use std::env;
 use std::sync::Arc;
 use std::collections::HashSet;
+
 use dotenv::dotenv;
-
 use tracing::{error, info};
+use reqwest::Client as HttpClient;
 
+use songbird::events::{Event, EventContext, EventHandler as VoiceEventHandler, TrackEvent};
+use songbird::SerenityInit;
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
@@ -18,6 +25,7 @@ use serenity::framework::standard::macros::group;
 use serenity::gateway::ShardManager;
 use serenity::model::event::ResumedEvent;
 use serenity::http::Http;
+use serenity::Result as SerenityResult;
 use serenity::prelude::*;
 
 use crate::commands::admin::*;
@@ -45,61 +53,46 @@ impl EventHandler for Handler {
 
 /*=====commands=====*/
 // for admin {join, leave, mute, unmute}
-// for general {quit, ping}
+// for general {quit, ping, help}
 // for music {play, stop, next}
 /*=================*/
 
 #[group]
-#[commands(join, leave, mute, unmute, quit, ping, play, stop, next)]
+#[commands(join, leave, mute, unmute, quit, ping, play, stop, next, help)]
 struct General;
 
 #[tokio::main]
 async fn main() {
-    dotenv::dotenv().expect("Failed to load .env file");
+    dotenv().ok();
 
     tracing_subscriber::fmt::init();
 
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
-    let http = Http::new(&token);
-
-    let (owners, _bot_id) = match http.get_current_application_info().await {
-        Ok(info) => {
-            let mut owners = HashSet::new();
-            if let Some(owner) = &info.owner {
-                owners.insert(owner.id);
-            }
-
-            (owners, info.id)
-        },
-        Err(why) => panic!("Could not access application info: {:?}", why),
-    };
-
     let framework = StandardFramework::new().group(&GENERAL_GROUP);
-    framework.configure(Configuration::new().owners(owners).prefix("~"));
+    framework.configure(Configuration::new().prefix("~"));
 
-    let intents = GatewayIntents::GUILD_MESSAGES
+    let intents = GatewayIntents::non_privileged()
+        | GatewayIntents::MESSAGE_CONTENT
         | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::MESSAGE_CONTENT;
+        | GatewayIntents::GUILD_MEMBERS;
+
     let mut client = Client::builder(&token, intents)
-        .framework(framework)
         .event_handler(Handler)
+        .framework(framework)
+        .register_songbird()
+        .type_map_insert::<HttpKey>(HttpClient::new())
         .await
         .expect("Err creating client");
 
-    {
-        let mut data = client.data.write().await;
-        data.insert::<ShardManagerContainer>(client.shard_manager.clone());
-    }
-
-    let shard_manager = client.shard_manager.clone();
-
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("Could not register ctrl+c handler");
-        shard_manager.shutdown_all().await;
+        let _ = client
+            .start()
+            .await
+            .map_err(|why| println!("Client ended: {:?}", why));
     });
 
-    if let Err(why) = client.start().await {
-        error!("Client error: {:?}", why);
-    }
+    let _signal_err = tokio::signal::ctrl_c().await;
+    println!("Received Ctrl-C, shutting down.");
 }
+

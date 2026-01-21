@@ -1,35 +1,151 @@
-use serenity::all::MessageBuilder;
+use crate::utils::check_msg;
+use crate::events::TrackErrorNotifier;
+
 use serenity::framework::standard::macros::command;
-use serenity::framework::standard::CommandResult;
-use serenity::model::prelude::*;
+use serenity::framework::standard::{Args, CommandResult};
+use serenity::model::{channel::Message};
 use serenity::prelude::*;
 
-use crate::ShardManagerContainer;
+use songbird::events::{Event, EventContext, EventHandler as VoiceEventHandler, TrackEvent};
 
 #[command]
-#[owners_only]
-async fn join() -> CommandResult {
+#[only_in(guilds)]
+async fn join(ctx: &Context, msg: &Message) -> CommandResult {
+    let (guild_id, channel_id) = {
+        let guild = msg.guild(&ctx.cache).unwrap();
+        let channel_id = guild
+            .voice_states
+            .get(&msg.author.id)
+            .and_then(|voice_state| voice_state.channel_id);
+
+        (guild.id, channel_id)
+    };
+
+    let connect_to = match channel_id {
+        Some(channel) => channel,
+        None => {
+            check_msg(msg.reply(ctx, "Not in a voice channel").await);
+
+            return Ok(());
+        },
+    };
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    if let Ok(handler_lock) = manager.join(guild_id, connect_to).await {
+        let mut handler = handler_lock.lock().await;
+        handler.add_global_event(TrackEvent::Error.into(), TrackErrorNotifier);
+    }
+
+    Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+    let has_handler = manager.get(guild_id).is_some();
+
+    if has_handler {
+        if let Err(e) = manager.remove(guild_id).await {
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, format!("Failed: {:?}", e))
+                    .await,
+            );
+        }
+
+        check_msg(msg.channel_id.say(&ctx.http, "Left voice channel").await);
+    } else {
+        check_msg(msg.reply(ctx, "Not in a voice channel").await);
+    }
+
+    Ok(())
+}
+
+
+#[command]
+#[only_in(guilds)]
+async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
+
+    let guild_id = msg.guild_id.unwrap();
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler) => handler,
+        None => {
+            check_msg(msg.reply(ctx, "Not in a voice channel").await);
+
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    if handler.is_mute() {
+        check_msg(msg.channel_id.say(&ctx.http, "Already muted").await);
+    } else {
+        if let Err(e) = handler.mute(true).await {
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, format!("Failed: {:?}", e))
+                    .await,
+            );
+        }
+
+        check_msg(msg.channel_id.say(&ctx.http, "Now muted").await);
+    }
 
     Ok(())
 }
 
 #[command]
 #[owners_only]
-async fn leave() -> CommandResult {
+async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
 
-    Ok(())
-}
+    let guild_id = msg.guild_id.unwrap();
 
-#[command]
-#[owners_only]
-async fn mute() -> CommandResult {
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
 
-    Ok(())
-}
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler) => handler,
+        None => {
+            check_msg(msg.reply(ctx, "Not in a voice channel").await);
 
-#[command]
-#[owners_only]
-async fn unmute() -> CommandResult {
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    if handler.is_mute() {
+        check_msg(msg.channel_id.say(&ctx.http, "Already muted").await);
+    } else {
+        if let Err(e) = handler.mute(false).await {
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, format!("Failed: {:?}", e))
+                    .await,
+            );
+        }
+
+        check_msg(msg.channel_id.say(&ctx.http, "Now unmuted").await);
+    }
 
     Ok(())
 }
