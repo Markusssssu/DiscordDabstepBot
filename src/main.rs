@@ -2,30 +2,22 @@
 mod commands;
 mod utils;
 mod events;
+mod handler;
 
 use crate::utils::*;
+use crate::handler::*;
 
 use std::env;
-use std::sync::Arc;
-use std::collections::HashSet;
+
+use tokio::sync::mpsc;
 
 use dotenv::dotenv;
-use tracing::{error, info};
 use reqwest::Client as HttpClient;
 
-use songbird::events::{Event, EventContext, EventHandler as VoiceEventHandler, TrackEvent};
 use songbird::SerenityInit;
-use serenity::async_trait;
-use serenity::model::channel::Message;
-use serenity::model::gateway::Ready;
-use serenity::utils::MessageBuilder;
 use serenity::framework::standard::Configuration;
 use serenity::framework::standard::StandardFramework;
 use serenity::framework::standard::macros::group;
-use serenity::gateway::ShardManager;
-use serenity::model::event::ResumedEvent;
-use serenity::http::Http;
-use serenity::Result as SerenityResult;
 use serenity::prelude::*;
 
 use crate::commands::admin::*;
@@ -33,23 +25,6 @@ use crate::commands::general::*;
 use crate::commands::music::*;
 
 pub struct ShardManagerContainer;
-
-impl TypeMapKey for ShardManagerContainer {
-    type Value = Arc<ShardManager>;
-}
-
-struct Handler;
-
-#[async_trait]
-impl EventHandler for Handler {
-    async fn ready(&self, _: Context, ready: Ready) {
-        info!("Connected as {}", ready.user.name);
-    }
-
-    async fn resume(&self, _: Context, _: ResumedEvent) {
-        info!("Resumed");
-    }
-}
 
 /*=====commands=====*/
 // for admin {join, leave, mute, unmute}
@@ -63,6 +38,7 @@ struct General;
 
 #[tokio::main]
 async fn main() {
+
     dotenv().ok();
 
     tracing_subscriber::fmt::init();

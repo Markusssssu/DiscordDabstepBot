@@ -3,6 +3,7 @@ use crate::utils::*;
 use songbird::input::YoutubeDl;
 use reqwest::Client as HttpClient;
 
+use std::sync::{Arc, Mutex};
 use serenity::framework::standard::macros::command;
 use serenity::framework::standard::{Args, CommandResult};
 use serenity::model::prelude::*;
@@ -43,12 +44,12 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     if let Some(handler_lock) = manager.get(guild_id) {
         let mut handler = handler_lock.lock().await;
 
-        // let mut src = if do_search {
-        //     YoutubeDl::new_search(http_client, url)
-        // } else {
-        //     YoutubeDl::new(http_client, url)
-        // };
-        // let _ = handler.play_input(src.clone().into());
+        let mut src = if do_search {
+            YoutubeDl::new_search(http_client, url.to_string())
+        } else {
+            YoutubeDl::new(http_client, url.to_string())
+        };
+        let _ = handler.play_input(src.clone().into());
 
         check_msg(msg.channel_id.say(&ctx.http, "Playing song").await);
     } else {
@@ -63,10 +64,32 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 }
 
 #[command]
-#[owners_only]
-async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
+#[only_in(guilds)]
+async fn stop(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    if let Some(handler_lock) = manager.get(guild_id) {
+        let handler = handler_lock.lock().await;
+        let queue = handler.queue();
+        queue.stop();
+
+        check_msg(msg.channel_id.say(&ctx.http, "Queue cleared.").await);
+    } else {
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Not in a voice channel to play in")
+                .await,
+        );
+    }
+
     Ok(())
 }
+
 
 #[command]
 #[owners_only]

@@ -2,11 +2,11 @@ use crate::utils::check_msg;
 use crate::events::TrackErrorNotifier;
 
 use serenity::framework::standard::macros::command;
-use serenity::framework::standard::{Args, CommandResult};
+use serenity::framework::standard::{CommandResult};
 use serenity::model::{channel::Message};
 use serenity::prelude::*;
 
-use songbird::events::{Event, EventContext, EventHandler as VoiceEventHandler, TrackEvent};
+use songbird::events::TrackEvent;
 
 #[command]
 #[only_in(guilds)]
@@ -71,7 +71,6 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-
 #[command]
 #[only_in(guilds)]
 async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
@@ -112,30 +111,16 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-#[owners_only]
+#[only_in(guilds)]
 async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
-
     let guild_id = msg.guild_id.unwrap();
-
     let manager = songbird::get(ctx)
         .await
         .expect("Songbird Voice client placed in at initialisation.")
         .clone();
 
-    let handler_lock = match manager.get(guild_id) {
-        Some(handler) => handler,
-        None => {
-            check_msg(msg.reply(ctx, "Not in a voice channel").await);
-
-            return Ok(());
-        },
-    };
-
-    let mut handler = handler_lock.lock().await;
-
-    if handler.is_mute() {
-        check_msg(msg.channel_id.say(&ctx.http, "Already muted").await);
-    } else {
+    if let Some(handler_lock) = manager.get(guild_id) {
+        let mut handler = handler_lock.lock().await;
         if let Err(e) = handler.mute(false).await {
             check_msg(
                 msg.channel_id
@@ -144,7 +129,13 @@ async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
             );
         }
 
-        check_msg(msg.channel_id.say(&ctx.http, "Now unmuted").await);
+        check_msg(msg.channel_id.say(&ctx.http, "Unmuted").await);
+    } else {
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Not in a voice channel to unmute in")
+                .await,
+        );
     }
 
     Ok(())

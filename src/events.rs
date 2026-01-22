@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use songbird::events::{Event, EventContext, EventHandler as VoiceEventHandler, TrackEvent};
+use songbird::events::{Event, EventContext, EventHandler as VoiceEventHandler};
 pub struct TrackErrorNotifier;
 
 #[async_trait]
@@ -19,6 +19,5 @@ impl VoiceEventHandler for TrackErrorNotifier {
     }
 }
 
-struct HttpKey;
 
 
