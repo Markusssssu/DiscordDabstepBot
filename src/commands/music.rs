@@ -1,13 +1,25 @@
+/*========== Used Crates {utils.rs} ===========*/
+
 use crate::utils::*;
 
-use songbird::input::YoutubeDl;
-use reqwest::Client as HttpClient;
+/*=============================================*/
 
-use std::sync::{Arc, Mutex};
+/*========== Used {Songbird} ===========*/
+
+use songbird::input::YoutubeDl;
+
+/*======================================*/
+
+/*========== Used {Serenity} ===========*/
+
 use serenity::framework::standard::macros::command;
 use serenity::framework::standard::{Args, CommandResult};
 use serenity::model::prelude::*;
 use serenity::prelude::*;
+
+/*======================================*/
+
+/*======= Command {Play} ========*/
 
 #[command]
 #[only_in(guilds)]
@@ -49,7 +61,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         } else {
             YoutubeDl::new(http_client, url.to_string())
         };
-        let _ = handler.play_input(src.clone().into());
+        let _ = handler.enqueue_input(src.clone().into());
 
         check_msg(msg.channel_id.say(&ctx.http, "Playing song").await);
     } else {
@@ -62,6 +74,48 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     Ok(())
 }
+
+/*================================*/
+
+/*======= Command {Skip} ========*/
+
+#[command]
+#[only_in(guilds)]
+async fn skip(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    if let Some(handler_lock) = manager.get(guild_id) {
+        let handler = handler_lock.lock().await;
+        let queue = handler.queue();
+        let _ = queue.skip();
+
+        check_msg(
+            msg.channel_id
+                .say(
+                    &ctx.http,
+                    format!("Song skipped: {} in queue.", queue.len()),
+                )
+                .await,
+        );
+    } else {
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Not in a voice channel to play in")
+                .await,
+        );
+    }
+
+    Ok(())
+}
+
+/*================================*/
+
+/*======= Command {Stop} ========*/
 
 #[command]
 #[only_in(guilds)]
@@ -90,6 +144,9 @@ async fn stop(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     Ok(())
 }
 
+/*================================*/
+
+/*======= Command {Next} ========*/
 
 #[command]
 #[owners_only]
@@ -97,6 +154,6 @@ async fn next(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-
+/*================================*/
 
 

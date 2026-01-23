@@ -1,12 +1,19 @@
 use crate::utils::check_msg;
 use crate::events::TrackErrorNotifier;
 
+use songbird::events::TrackEvent;
+
+/*========== Used {Serenity} ===========*/
+
 use serenity::framework::standard::macros::command;
 use serenity::framework::standard::{CommandResult};
 use serenity::model::{channel::Message};
 use serenity::prelude::*;
 
-use songbird::events::TrackEvent;
+/*======================================*/
+
+
+/*======= Command {Join} ========*/
 
 #[command]
 #[only_in(guilds)]
@@ -43,6 +50,10 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
+/*==============================*/
+
+/*======= Command {leave} ========*/
+
 #[command]
 #[only_in(guilds)]
 async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
@@ -70,6 +81,10 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 
     Ok(())
 }
+
+/*==============================*/
+
+/*======= Command {mute} ========*/
 
 #[command]
 #[only_in(guilds)]
@@ -110,6 +125,11 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
+/*==============================*/
+
+
+/*======= Command {unmute} ========*/
+
 #[command]
 #[only_in(guilds)]
 async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
@@ -141,7 +161,7 @@ async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-
+/*==============================*/
 
 
 

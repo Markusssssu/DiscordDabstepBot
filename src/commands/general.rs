@@ -1,15 +1,15 @@
+
+/*========== Used {Serenity} ===========*/
+
 use serenity::all::MessageBuilder;
 use serenity::framework::standard::macros::command;
 use serenity::framework::standard::CommandResult;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-#[command]
-#[owners_only]
-async fn quit(ctx: &Context, msg: &Message) -> CommandResult {
+/*======================================*/
 
-    Ok(())
-}
+/*======= Command {Ping} ========*/
 
 #[command]
 #[only_in(guilds)]
@@ -29,6 +29,10 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
+/*==============================*/
+
+/*======= Command {Help} ========*/
+
 #[command]
 #[only_in(guilds)]
 async fn help(ctx: &Context, msg: &Message) -> CommandResult {
@@ -38,7 +42,7 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
     use serenity::utils::MessageBuilder;
 
     let response = MessageBuilder::new()
-        .push_bold_line("🤖 Доступные команды бота:")
+        .push_bold_line("Доступные команды бота:")
         .push_line("") // Пустая строка для отступа
 
         .push_bold_line("🎶 Музыка:")
@@ -63,3 +67,5 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
     msg.channel_id.say(&ctx.http, &response).await?;
     Ok(())
 }
+
+/*==============================*/
